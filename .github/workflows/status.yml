@@ -1,0 +1,40 @@
+name: Check and publish service status
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: status-pages
+  cancel-in-progress: false
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Probe public endpoints
+        id: checks
+        continue-on-error: true
+        run: node --experimental-strip-types scripts/status-check.mjs --output site/status.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Publish report including failures
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Flag failed probes after publication
+        if: steps.checks.outcome == 'failure'
+        run: exit 1
